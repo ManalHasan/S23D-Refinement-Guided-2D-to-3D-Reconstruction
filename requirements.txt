@@ -1,0 +1,27 @@
+# requirements.txt
+# Sketch → Refined 2D Image Pipeline
+# Install: pip install -r requirements.txt
+
+# Core deep learning
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Diffusion model + ControlNet
+diffusers>=0.27.0
+transformers>=4.38.0
+accelerate>=0.27.0
+
+# Memory efficient attention (saves ~2GB VRAM)
+xformers>=0.0.24
+
+# Image processing
+Pillow>=10.0.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# HuggingFace model downloading
+huggingface_hub>=0.21.0
+
+# Optional: for Ollama / LLaVA integration
+# (only needed if you want LLM-based annotation interpretation)
+# ollama  (install separately: https://ollama.com)
