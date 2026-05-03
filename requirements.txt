@@ -18,11 +18,19 @@ controlnet_aux
 huggingface_hub
 
 # --- Stage 3: 3D Reconstruction (TripoSR) ---
+omegaconf==2.3.0
+Pillow==10.1.0
+einops==0.7.0
+git+https://github.com/tatsy/torchmcubes.git
+transformers==4.35.0
+trimesh==4.0.5
 rembg
-onnxruntime; sys_platform == "darwin"
-onnxruntime-gpu; sys_platform != "darwin"
-trimesh
-xatlas
+huggingface-hub
+imageio[ffmpeg]
+gradio
+xatlas==0.0.11
+moderngl==5.10.0
+
 
 # --- Evaluation Metrics ---
 git+https://github.com/openai/CLIP.git
