@@ -1,4 +1,4 @@
-# Sketch to #D
+# Sketch to 3D
 
 Sketch to 3D sketch-guided image refinement and reconstruction pipeline that utilizes Stable Diffusion XL and ControlNet. The application includes a Streamlit-based interactive web interface and an OpenCV-based annotation detector that classifies colored annotations into structural adjustments and prompt modifications.
 
