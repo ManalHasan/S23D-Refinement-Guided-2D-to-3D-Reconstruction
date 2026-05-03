@@ -23,14 +23,15 @@ def process_annotated_sketch(img):
     mask_blue = cv2.inRange(hsv, lower_blue, upper_blue)
 
     # --- BLACK ---
-    lower_black, upper_black = np.array([0, 0, 0]), np.array([180, 255, 90])
+    lower_black, upper_black = np.array([0, 0, 0]), np.array([180, 255, 60])
     mask_black = cv2.inRange(hsv, lower_black, upper_black)
 
     # 2. INTERACTION CLEANUP
     mask_black = cv2.bitwise_and(mask_black, cv2.bitwise_not(mask_blue))
     mask_black = cv2.bitwise_and(mask_black, cv2.bitwise_not(mask_red))
 
-    kernel = np.ones((3,3), np.uint8)
+    kernel = np.ones((2,2), np.uint8)
+    mask_black = cv2.dilate(mask_black, kernel, iterations=1)
     mask_red = cv2.morphologyEx(mask_red, cv2.MORPH_OPEN, kernel)
     mask_blue = cv2.morphologyEx(mask_blue, cv2.MORPH_OPEN, kernel)
     mask_black = cv2.morphologyEx(mask_black, cv2.MORPH_OPEN, kernel)
@@ -49,9 +50,10 @@ def process_annotated_sketch(img):
     red_results = reader.readtext(red_for_ocr)
     blue_results = reader.readtext(blue_for_ocr)
     black_results = reader.readtext(black_for_ocr)
+    print(f"Raw OCR Results - Red: {red_results}, Blue: {blue_results}, Black: {black_results}")
 
     # 5. CATEGORIZE
-    CONFIDENCE_THRESHOLD = 0.3
+    CONFIDENCE_THRESHOLD = 0.5
     
     def get_combined_text(results_raw):
         combined_words = []
@@ -66,5 +68,6 @@ def process_annotated_sketch(img):
         "Blue": get_combined_text(blue_results),
         "Black": get_combined_text(black_results)
     }
+    print(f"Extracted Annotations: {extracted_data}")
 
     return extracted_data
