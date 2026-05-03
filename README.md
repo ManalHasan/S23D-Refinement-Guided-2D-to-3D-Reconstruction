@@ -1,134 +1,28 @@
-# Sketch → Refined 2D Image Pipeline
+# Sketch to #D
 
-A complete implementation of sketch-guided image refinement using
-**SD1.5 + ControlNet**, inspired by the ScribblesAnnotate (IUI '26) paper.
-Runs entirely locally on a **16GB GPU** at zero API cost.
+Sketch to 3D sketch-guided image refinement and reconstruction pipeline that utilizes Stable Diffusion XL and ControlNet. The application includes a Streamlit-based interactive web interface and an OpenCV-based annotation detector that classifies colored annotations into structural adjustments and prompt modifications.
+
+## Annotation Processing Guide
+
+The application's annotation processing module isolates specific colors from your sketch using HSV thresholding and reads the text embedded within those colors:
+
+* **Red text**: Maps to the name or identity of the object (e.g., assigned as `st.session_state.obj_name` in the Streamlit app).
+* **Black text**: Defines the color, texture, or style parameter of the object (e.g., used to form `"with a {annotations.get('Black', 'standard')}..."` in the prompt generation logic).
+* **Blue text**: Extracted as additional features to modify the refined image generation.
+
 
 ---
 
-## Updated Pipeline
+## Commands to Run
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    SKETCH REFINEMENT PIPELINE                       │
-└─────────────────────────────────────────────────────────────────────┘
-
-  INPUT: Annotated Sketch Image
-  (sketch with colored marks: arrows, circles, scribbles, X marks)
-         │
-         ▼
-┌────────────────────────────────────────────────────────────────────┐
-│  STAGE 1: ANNOTATION DETECTION                                     │
-│  File: annotation_detector.py      [CPU only, zero VRAM, instant]  │
-│                                                                    │
-│  1a. Annotation Isolation                                          │
-│      ├── If base sketch provided: subtract base from annotated     │
-│      └── Else: extract colored pixels (filter out black/white)     │
-│                                                                    │
-│  1b. Element Detection (OpenCV)                                    │
-│      ├── Arrows    → HoughLinesP + contour aspect ratio            │
-│      ├── Circles   → HoughCircles                                  │
-│      ├── X marks   → crossing line detection                       │
-│      └── Scribbles → high perimeter-to-area ratio contours         │
-│                                                                    │
-│  1c. Color Detection (HSV ranges)                                  │
-│      ├── Red    → move / orient                                    │
-│      ├── Green  → add new object                                   │
-│      ├── Blue   → resize                                           │
-│      └── Yellow → pattern / texture                                │
-│                                                                    │
-│  1d. Action Classification (decision tree)                         │
-│      Maps detected elements → 1 of 7 action types:                │
-│      [Add object | Change shape | Add pattern |                    │
-│       Reference pattern | Change orientation |                     │
-│       Change size | Move object]                                   │
-│                                                                    │
-│  1e. Structured Prompt Generation                                  │
-│      Action Guide template + user text → SD-ready prompt           │
-│                                                                    │
-│  OUTPUT: action_type, confidence, region_mask, structured_prompt   │
-└──────────────────────┬─────────────────────────────────────────────┘
-                       │
-                       ▼
-┌────────────────────────────────────────────────────────────────────┐
-│  STAGE 2: SKETCH PREPROCESSING                                     │
-│  File: image_generator.py          [CPU, minimal compute]          │
-│                                                                    │
-│  ├── Resize to 512×512 (SD1.5 native resolution)                   │
-│  ├── Convert to RGB                                                │
-│  ├── Auto-invert if needed (ensure white bg, black lines)          │
-│  ├── Convert to grayscale (strips annotation colors)               │
-│  └── Binary threshold (clean up sketch lines)                      │
-│                                                                    │
-│  OUTPUT: clean control_image (512×512, white bg, black lines)      │
-└──────────────────────┬─────────────────────────────────────────────┘
-                       │
-                       ▼
-┌────────────────────────────────────────────────────────────────────┐
-│  STAGE 3: CONTROLLED IMAGE GENERATION                              │
-│  File: image_generator.py          [GPU, ~6-8GB VRAM]              │
-│                                                                    │
-│  ControlNet (scribble/softedge/lineart/canny)                      │
-│  ├── Reads control_image (sketch structure)                        │
-│  ├── controlnet_scale=0.9 (how strictly to follow sketch)          │
-│  └── Outputs conditioning features → injected into SD UNet         │
-│                                                                    │
-│  Stable Diffusion 1.5 (frozen backbone)                            │
-│  ├── Input: structured_prompt + negative_prompt                    │
-│  ├── Condition: ControlNet features                                │
-│  ├── Scheduler: UniPC (20 steps, fast)                             │
-│  ├── Guidance scale: 7.5                                           │
-│  └── Denoising: 20 steps → refined image                          │
-│                                                                    │
-│  Optional: Region Mask Blending (inspired by DoodleAssist)         │
-│  ├── Generated image blended with original in masked region        │
-│  └── Gaussian-smoothed mask edges for natural transitions          │
-│                                                                    │
-│  OUTPUT: refined 2D image(s)                                       │
-└──────────────────────┬─────────────────────────────────────────────┘
-                       │
-                       ▼
-  OUTPUT: Refined 2D Image(s) saved to outputs/
-
-
-VRAM Usage at Each Stage:
-  Stage 1: 0 GB    (pure CPU/OpenCV)
-  Stage 2: ~0.1 GB (image ops)
-  Stage 3: ~6-8 GB (SD1.5 + ControlNet, with cpu_offload)
-  Peak:    ~8 GB   (well within 16GB)
-
-Time per image (RTX 3080/4070 16GB, 20 steps):
-  Stage 1: ~0.1s
-  Stage 2: ~0.1s
-  Stage 3: ~3-8s
-  Total:   ~4-9s
-```
-
----
-
-## File Structure
-
-```
-sketch_pipeline/
-├── annotation_detector.py   # Stage 1: OpenCV annotation detection
-├── image_generator.py       # Stage 2+3: SD1.5 + ControlNet generation
-├── pipeline.py              # Main orchestrator
-├── llava_detector.py        # Optional: LLaVA-based detection (replaces OpenCV)
-├── run.py                   # CLI entry point
-├── requirements.txt         # Dependencies
-└── outputs/                 # Generated images saved here
-```
-
----
-
-## Setup
-
-### 1. Install dependencies
+### 1. Install Dependencies
+Ensure you have the required packages installed in your environment:
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Install PyTorch with CUDA (if not already installed)
+### 2. Install PyTorch with CUDA
+Depending on your CUDA version, install PyTorch with the appropriate drivers:
 ```bash
 # For CUDA 11.8
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
@@ -137,166 +31,36 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 ```
 
-### 3. First run downloads model weights automatically (~5GB total)
-- SD1.5: ~4GB (cached in ~/.cache/huggingface/)
-- ControlNet scribble: ~1.5GB
-
----
-
-## Usage
-
-### Basic usage
+### 3. Start the Web Application
+To run the interactive Streamlit user interface:
 ```bash
-python run.py --sketch my_sketch.png
+streamlit run main.py
 ```
 
-### With text description
+### 4. Running the CLI Tool (Optional)
+You can run the pipeline directly using the CLI entry point with a base sketch:
 ```bash
-python run.py --sketch my_sketch.png --text "move the lamp to the right"
-```
-
-### With clean base sketch (better detection)
-```bash
-python run.py --sketch annotated.png --base clean.png --text "add pattern to sofa"
-```
-
-### Demo mode (generates test sketch, no files needed)
-```bash
-python run.py --demo
-```
-
-### Manual prompt override (skip detection)
-```bash
-python run.py --sketch my_sketch.png --prompt "Move the chair to the left side. High quality 2D illustration."
-```
-
-### Higher quality output
-```bash
-python run.py --sketch my_sketch.png --steps 30 --variants 4
+python run.py --sketch annotated.png --base clean.png --text "move the object to the right"
 ```
 
 ---
 
-## Python API
+## Model Architecture and Pipeline
+
+The application loads the Stable Diffusion XL pipeline along with the necessary MistoLine and VAE components:
 
 ```python
-from pipeline import SketchRefinementPipeline, PipelineConfig
-
-# Configure
-config = PipelineConfig(
-    controlnet_type     = "scribble",   # or softedge / lineart / canny
-    num_inference_steps = 20,
-    guidance_scale      = 7.5,
-    controlnet_scale    = 0.9,
-    num_variants        = 2,
-    seed                = 42,
-    output_dir          = "outputs",
-)
-
-# Initialize and load
-pipeline = SketchRefinementPipeline(config)
-pipeline.load()     # loads SD + ControlNet weights (~30s first time)
-
-# Run
-result = pipeline.run(
-    annotated_sketch_path = "my_sketch.png",
-    base_sketch_path      = None,       # optional clean sketch
-    user_text             = "move the lamp to the right side",
-)
-
-# Use results
-result.show_summary()
-for i, img in enumerate(result.output_images):
-    img.save(f"my_output_{i}.png")
-
-# Free VRAM when done
-pipeline.unload()
+print("Initializing SDXL and Anyline Models...")
+anyline = AnylineDetector.from_pretrained("TheMistoAI/MistoLine", filename="MTEED.pth", subfolder="Anyline")
+controlnet = ControlNetModel.from_pretrained("TheMistoAI/MistoLine", torch_dtype=torch.float16, variant="fp16")
+vae = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16)
+pipe = StableDiffusionXLControlNetPipeline.from_pretrained("Lykon/dreamshaper-xl-1-0", controlnet=controlnet, vae=vae, torch_dtype=torch.float16)
 ```
 
 ---
 
-## Annotation Guide (Color Conventions)
+## 2D → 3D Reconstruction
 
-Draw annotations on your sketch using these colors for best detection:
-
-| Color  | Meaning                     | Example                          |
-|--------|-----------------------------|----------------------------------|
-| RED    | Move / Change orientation   | Red arrow showing new position   |
-| GREEN  | Add new object              | Green scribble where to add      |
-| BLUE   | Resize object               | Blue circle around object        |
-| YELLOW | Add / Reference pattern     | Yellow scribble on surface       |
-| X mark | Remove / Delete object      | Any color X drawn over object    |
-
----
-
-## Optional: Use LLaVA Instead of OpenCV
-
-For complex or free-form annotations, replace the OpenCV detector with LLaVA:
-
-```bash
-# Install Ollama
-curl -fsSL https://ollama.com/install.sh | sh
-
-# Pull LLaVA model
-ollama pull llava
-
-# Run Ollama server
-ollama serve &
-```
-
-Then in your code:
-```python
-from llava_detector import LLaVAAnnotationDetector
-from image_generator import SketchToImageGenerator
-import numpy as np
-from PIL import Image
-
-# Step 1: Detect with LLaVA (uses ~10GB VRAM via Ollama)
-detector = LLaVAAnnotationDetector(user_text="move the lamp right")
-sketch_np = np.array(Image.open("sketch.png"))
-detection = detector.detect(sketch_np)
-# LLaVA unloads automatically from Ollama memory
-
-# Step 2: Generate with SD (uses ~6-8GB VRAM)
-generator = SketchToImageGenerator()
-generator.load()
-images = generator.generate(
-    sketch_image = Image.open("sketch.png"),
-    prompt       = detection.structured_prompt,
-)
-generator.unload()
-```
-
----
-
-## Hyperparameter Tuning Guide
-
-| Parameter           | Lower value          | Higher value              | Recommended |
-|---------------------|----------------------|---------------------------|-------------|
-| `num_steps`         | Faster, less detail  | Slower, more detail        | 20-30       |
-| `guidance_scale`    | More creative        | Strictly follows prompt    | 7.0-9.0     |
-| `controlnet_scale`  | Ignores sketch more  | Follows sketch strictly    | 0.7-1.0     |
-
-**If output ignores sketch structure:** increase `controlnet_scale` (try 1.0-1.2)
-**If output looks too rigid:** decrease `controlnet_scale` (try 0.6-0.7)
-**If output ignores prompt:** increase `guidance_scale` (try 9.0-12.0)
-**If output looks oversaturated/unnatural:** decrease `guidance_scale` (try 6.0)
-
----
-
-## Future: 2D → 3D
-
-Once you have refined 2D images, these free models convert them to 3D:
-
-```bash
-# TripoSR (fast, ~5GB VRAM)
-pip install tsr
-python -c "
-from tsr.system import TSR
+After refining your 2D asset using Sketch2Blend, you can convert the output image into a 3D mesh using the TripoSR repository ([https://github.com/VAST-AI-Research/TripoSR](https://github.com/VAST-AI-Research/TripoSR))
 model = TSR.from_pretrained('stabilityai/TripoSR')
-# feed your refined 2D image
-"
-
-# Zero123++ (multi-view, ~8GB VRAM)
-# https://github.com/SUDO-AI-3D/zero123plus
 ```
