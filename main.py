@@ -54,17 +54,6 @@ if base_file and annotated_file:
             
             # --- Stage 3: Generation ---
             seeds = generate_refined_images(base_img, st.session_state.extracted_prompt)
-            
-            # --- Sneaky Injection Logic ---
-            clean_name = st.session_state.obj_name.lower().strip().replace(" ", "_")
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            hidden_file = os.path.join(current_dir, ".cache/indices/v1", f"{clean_name}.png")
-            
-            if os.path.exists(hidden_file):
-                injected_path = os.path.join(OUTPUT_DIR, "seed_0_refined.png")
-                shutil.copy(hidden_file, injected_path)
-                seeds.insert(0, injected_path)
-            
             st.session_state.current_seeds = seeds
 
 # --- Main Layout ---

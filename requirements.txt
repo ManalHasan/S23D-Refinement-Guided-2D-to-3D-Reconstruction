@@ -23,3 +23,9 @@ onnxruntime; sys_platform == "darwin"
 onnxruntime-gpu; sys_platform != "darwin"
 trimesh
 xatlas
+
+# --- Evaluation Metrics ---
+git+https://github.com/openai/CLIP.git
+clean-fid
+torchmetrics
+scipy
